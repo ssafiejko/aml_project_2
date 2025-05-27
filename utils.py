@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedKFold
 from custom_scaler import column_transformer
 from sklearn.preprocessing import StandardScaler
+import copy
 
 # Zmienne wybrane przez VIF (deterministyczne i długo się liczy)
 VIF_SELECTED_VARIABES = [13, 178, 194, 298, 305, 117, 228, 462, 414, 425, 0, 1, 3, 4, 5, 6, 7, 8, 9]
@@ -15,7 +16,7 @@ class ModelComparator:
         self.n_splits = n_splits
         self.scaler = column_transformer
         self.random_state = random_state
-
+    
     def top_k_accuracy_curve(self, y_true, y_prob):
         y_prob = np.array(y_prob).flatten()
         sorted_indices = np.argsort(y_prob)[::-1]
@@ -71,12 +72,16 @@ class ModelComparator:
         plt.tight_layout()
         plt.show()
 
+    def plot_variables_histograms(self):
+        pass
     def evaluate_model(self, model, variables=None):
         skf = StratifiedKFold(n_splits=self.n_splits, shuffle=True, random_state=self.random_state)
 
         acc_curves = []
         threshold_curves = []
         train_accuracies = []
+        
+        test_accuracies = []
 
         for train_idx, test_idx in skf.split(self.X, self.y):
             X_train_fold = self.X[train_idx]
@@ -94,7 +99,7 @@ class ModelComparator:
             model.fit(X_train_fold, y_train_fold)
             y_train_pred = model.predict(X_train_fold)
             y_test_proba = model.predict_proba(X_test_fold)
-
+            y_test_pred  = model.predict(X_test_fold).flatten()
             if y_test_proba.ndim > 1 and y_test_proba.shape[1] > 1:
                 y_test_proba = y_test_proba[:, 1]
 
@@ -103,6 +108,7 @@ class ModelComparator:
             acc_curves.append(acc_curve)
             threshold_curves.append(threshold_curve)
             train_accuracies.append(self.train_acc(y_train_fold, y_train_pred))
+            test_accuracies.append(np.mean(y_test_pred == y_test_fold))
 
         # Ensure all curves have same length (trim to min length for plotting)
         min_len = min(map(len, acc_curves))
@@ -113,4 +119,51 @@ class ModelComparator:
 
         self.plot_evaluation(acc_curves, threshold_curves, avg_train_acc)
 
-        return np.mean(acc_curves, axis=0)[int(len(test_idx)*0.2)]
+        test_accuracy_mean = np.mean(test_accuracies)
+        test_accuract_std  = np.std(test_accuracies)
+        print(f"Test Accuracies (Overall): {test_accuracy_mean:.2f} ± {test_accuract_std:.2f}")
+
+        return np.mean(acc_curves, axis=0)[int(len(test_idx)*0.2)] # Acc@20%
+    
+
+class ModelEnsemble:
+
+    def __init__(self, models, voting, weights=None):
+        assert voting in ("mean", "median", "weighted")
+        if voting == "weighted":
+            if weights is None:
+                raise ValueError("weighted voting requires non-Null weights argument")
+        self.models = [copy.deepcopy(model) for model in models]
+        self.n_models = len(models)
+        self.voting = voting
+
+        if weights is not None:
+            weights_raw = np.asarray(weights)
+            self.weights = weights_raw / np.sum(weights_raw) # Normalization
+
+    def fit(self, X, y):
+        # Trains all models independently
+        for model in self.models:
+            model.fit(X,y)
+    
+    def predict(self, X):
+        y_proba = self.predict_proba(X)
+        return (y_proba > 0.5).astype(np.int8).squeeze()
+    
+    def predict_proba(self, X):
+        predictions = []
+
+        for model in self.models:
+            y_proba_curr = model.predict_proba(X)
+            if y_proba_curr.ndim > 1 and y_proba_curr.shape[1] > 1:
+                    y_proba_curr = y_proba_curr[:, 1]
+            predictions.append(y_proba_curr.squeeze())
+        
+        predictions = np.asarray(predictions)
+        if self.voting == "mean":
+            return np.mean(predictions, axis=0)
+        elif self.voting == "median":
+            return np.median(predictions, axis=0)
+        elif self.voting == "weighted":
+            return np.dot(self.weights, predictions)
+
