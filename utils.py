@@ -74,6 +74,7 @@ class ModelComparator:
 
     def plot_variables_histograms(self):
         pass
+
     def evaluate_model(self, model, variables=None):
         skf = StratifiedKFold(n_splits=self.n_splits, shuffle=True, random_state=self.random_state)
 
