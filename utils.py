@@ -1,8 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedKFold
-from custom_scaler import column_transformer
+from custom_scaler import column_transformer, tree_column_transformer
 from sklearn.preprocessing import StandardScaler
+from sklearn.base import clone
 import copy
 
 # Zmienne wybrane przez VIF (deterministyczne i długo się liczy)
@@ -10,13 +11,18 @@ VIF_SELECTED_VARIABES = [13, 178, 194, 298, 305, 117, 228, 462, 414, 425, 0, 1, 
 
 class ModelComparator:
 
-    def __init__(self, X, y, n_splits=5, random_state=42):
+    def __init__(self, X, y, n_splits=5, scaling="standard", random_state=42):
         self.X = np.asarray(X)
         self.y = np.asarray(y)
         self.n_splits = n_splits
-        self.scaler = column_transformer
         self.random_state = random_state
-    
+        self.scaling = scaling
+        if scaling == "standard":
+            self.scaler = clone(column_transformer)
+        elif scaling == "tree":
+            self.scaler = clone(tree_column_transformer)
+        else:
+            self.scaler = None
     def top_k_accuracy_curve(self, y_true, y_prob):
         y_prob = np.array(y_prob).flatten()
         sorted_indices = np.argsort(y_prob)[::-1]
@@ -34,8 +40,11 @@ class ModelComparator:
     def scale(self, X_train, X_test):
         # sclr = StandardScaler()
         # self.scaler = sclr
-        self.scaler.fit(X_train)
-        return self.scaler.transform(X_train), self.scaler.transform(X_test)
+        if self.scaling is not None:
+            self.scaler.fit(X_train)
+            return self.scaler.transform(X_train), self.scaler.transform(X_test)
+        else:
+            return X_train, X_test
 
     def plot_evaluation(self, all_accuracies, all_thresholds, avg_train_acc):
         half_threshold = len(all_accuracies[0]) // 2 # We are interested only in y==1, no inspection
