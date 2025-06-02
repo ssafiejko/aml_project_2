@@ -55,30 +55,6 @@ column_transformer = ColumnTransformer([
     ]), skewed_normal_cols)
 ], remainder='passthrough')
 
-
-alternative_column_transformer = ColumnTransformer([
-    ('standard', Pipeline([
-        ('clip', OutlierClipper()),
-        ('scaler', StandardScaler())
-    ]), normal_cols),
-
-    ('quantile', Pipeline([
-        ('clip', OutlierClipper()),
-        ('quantile', QuantileTransformer(output_distribution='normal', n_quantiles=100))  # Increase n_quantiles
-    ]), exponential_cols),
-
-    ('robust', Pipeline([  # Consider RobustScaler instead of MinMax
-        ('clip', OutlierClipper()),
-        ('scaler', RobustScaler())
-    ]), uniform_cols),
-
-    ('power', Pipeline([
-        ('clip', OutlierClipper()),
-        ('power', PowerTransformer(method='yeo-johnson')),
-        ('scaler', StandardScaler())
-    ]), skewed_normal_cols)
-], remainder='passthrough')
-
 # No transformations, only outlier clipping
 # Only log for Exponentials
 tree_column_transformer = ColumnTransformer([
